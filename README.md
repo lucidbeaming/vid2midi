@@ -4,7 +4,7 @@
 Requires [OpenCV](https://opencv.org/) and [Mido](https://mido.readthedocs.io/en/latest/).
 
 ### Usage
- vid2midi.py <video filename>
+ vid2midi.py \<video filename\>
  
 #### Notes
  It works by grabbing a 40px square in the center of the video file, blurring it, and averaging the brightness values of the contained pixels. Iterating each frame of the movie file, it looks for a brightness value that is consistent for at least 5 frames. If it is, a note is generated corresponding to the 12 notes of the chromatic scale. Brighter areas produce higher notes.
