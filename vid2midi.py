@@ -2,6 +2,7 @@ import time
 import cv2
 import numpy as np
 import sys
+from tqdm import tqdm
 from collections import namedtuple
 from mido import Message, MidiFile, MidiTrack, second2tick
 
@@ -17,8 +18,7 @@ cap = cv2.VideoCapture(infile)
 fps = cap.get(cv2.CAP_PROP_FPS)
 w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-framecount = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-
+framecount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
 mid = MidiFile()
 mid.ticks_per_beat = 480
@@ -64,7 +64,8 @@ estack = [0]
 prenoteVal = 0
 notebegin = 0
 
-while(cap.isOpened()):
+# while(cap.isOpened()):
+for i in tqdm(range(framecount)):
 
   ret, frame = cap.read()
   if ret == True:
@@ -94,7 +95,6 @@ while(cap.isOpened()):
       if prenoteVal != noteVal:
         duration = int(ticker(estack[0]) - notebegin)       
         if (noteVal != 0) and (prenoteVal != 0):
-          print (prenoteVal, noteVal, duration, end='')
           track.append(Message('note_on', note=prenoteVal, velocity=110, time=0))
           track.append(Message('note_off', note=prenoteVal, velocity=110, time=duration))
           notebegin = ticker(estack[0])
