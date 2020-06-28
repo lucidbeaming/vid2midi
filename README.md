@@ -1,7 +1,7 @@
 # vid2midi
  Generates a midi file based on brightness levels in a video
 
-Requires [OpenCV](https://opencv.org/) and [Mido](https://mido.readthedocs.io/en/latest/).
+Requires [OpenCV](https://opencv.org/), [Mido](https://mido.readthedocs.io/en/latest/) and [tqdm](https://github.com/tqdm/tqdm).
 
 ### Usage
  vid2midi.py \<video filename\>
