@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import time
 import cv2
 import numpy as np
 import sys
@@ -32,8 +31,8 @@ except KeyError:
 
 cap = cv2.VideoCapture(parameters.filename)
 fps = cap.get(cv2.CAP_PROP_FPS)
-w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 framecount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 window = {"small": .05, "medium": .1, "large": .25}
 
@@ -73,38 +72,50 @@ frametime = 1 / fps
 ticktime = ticker(frametime)
 elapsed = 0
 
-if (cap.isOpened() is False):
+if cap.isOpened() is False:
     print("Error opening video stream or file")
 
 fstack = [0]
 estack = [0]
 prenoteVal = 0
+preVel = 0
 notebegin = 0
 
-cv2.namedWindow('sample')        # Create a named window
+cv2.namedWindow('sample')
 cv2.moveWindow('sample', 250, 150)
 
 for i in tqdm(range(framecount)):
+
     ret, frame = cap.read()
     if ret is True:
-        if w > h:
-            p = int(w * window[window_size])
+        if width > height:
+            p = int(width * window[window_size])
         else:
-            p = int(h * window[window_size])
-        left = int(w / 2) - p
-        right = int(w / 2) + p
-        top = int(h / 2) - p
-        bottom = int(h / 2) + p
+            p = int(height * window[window_size])
+        left = int(width / 2) - p
+        right = int(width / 2) + p
+        top = int(height / 2) - p
+        bottom = int(height / 2) + p
         chunk = frame[left:right, top:bottom]
         blurchunk = cv2.GaussianBlur(chunk, (15, 15), 0)
 
         cv2.imshow('sample', blurchunk)
 
         hsv = cv2.cvtColor(blurchunk, cv2.COLOR_BGR2HSV)
-        _, _, v = cv2.split(hsv)
+        h, s, v = cv2.split(hsv)
 
-        avg = int(np.average(v.flatten()))
-        noteVal = detect_level(avg)
+        saturation = np.average(s.flatten())
+
+        if saturation > 25:
+            avg_hue = np.average(h.flatten())
+            noteHue = int(np.interp(avg_hue, [0, 179], [0, 255]))
+            avg = np.average(v.flatten())
+            vel = int(np.interp(avg, [0, 255], [0, 127]))
+            noteVal = detect_level(noteHue)
+        else:
+            avg = int(np.average(v.flatten()))
+            vel = 110
+            noteVal = detect_level(avg)
 
         fstack.append(noteVal)
         estack.append(elapsed)
@@ -114,16 +125,19 @@ for i in tqdm(range(framecount)):
         if fstack.count(noteVal) != len(fstack):
             if prenoteVal != noteVal:
                 duration = int(ticker(estack[0]) - notebegin)
-            if (noteVal != 0) and (prenoteVal != 0):
-                track.append(Message('note_on', note=prenoteVal, velocity=110, time=0))
-                track.append(Message('note_off', note=prenoteVal, velocity=110, time=duration))
-                notebegin = ticker(estack[0])
-            prenoteVal = noteVal
+                if (noteVal != 0) and (prenoteVal != 0):
+                    track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
+                    track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=duration))
+                    notebegin = ticker(estack[0])
+                    print(noteVal, vel)
+                prenoteVal = noteVal
+                preVel = vel
 
         if cv2.waitKey(25) & 0xFF == ord('q'):
             break
 
         elapsed += frametime
+
     else:
         break
 
