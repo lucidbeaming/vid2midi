@@ -3,30 +3,30 @@
 import cv2
 import numpy as np
 import sys
+import os.path
 import argparse
 from tqdm import tqdm
 from collections import namedtuple
 from mido import Message, MidiFile, MidiTrack, second2tick
 
-class SizeAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        if not 10 < values < 500:
-            raise argparse.ArgumentError(self, "sample size must be between 10 and 500")
-        setattr(namespace, self.dest, values)
-
-
-parser = argparse.ArgumentParser(prog='vid2midi', description='Convert a section of a midifile to MIDI notes based on average brightness')
+parser = argparse.ArgumentParser(prog='vid2midi', description='Convert a section of a video file to MIDI notes based on color or brightness')
 parser.add_argument('-s', '--size', default='small', type=str, choices=['small', 'medium', 'large'], help='size of the sample area')
 parser.add_argument('-o', '--octaves', default=1, type=int, choices=[1, 3, 7], help='octave range of resulting notes')
+parser.add_argument('-c', '--colors', default='mono', type=str, choices=['mono', 'all'], help='color range to measure')
 parser.add_argument('filename')
 parameters = parser.parse_args()
 octaves = parameters.octaves
 window_size = parameters.size
+color_range = parameters.colors
 
 try:
     midifile = parameters.filename.split('.')[0] + '.mid'
 except KeyError:
     print("Bad input filename")
+    sys.exit()
+
+if os.path.isfile(parameters.filename) is False:
+    print("Input file '" + parameters.filename + "' does not exist")
     sys.exit()
 
 cap = cv2.VideoCapture(parameters.filename)
@@ -104,13 +104,11 @@ for i in tqdm(range(framecount)):
         hsv = cv2.cvtColor(blurchunk, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv)
 
-        saturation = np.average(s.flatten())
-
-        if saturation > 25:
+        if color_range == 'all':
             avg_hue = np.average(h.flatten())
             noteHue = int(np.interp(avg_hue, [0, 179], [0, 255]))
             avg = np.average(v.flatten())
-            vel = int(np.interp(avg, [0, 255], [0, 127]))
+            vel = int(np.interp(avg, [0, 255], [75, 127]))
             noteVal = detect_level(noteHue)
         else:
             avg = int(np.average(v.flatten()))
@@ -129,7 +127,6 @@ for i in tqdm(range(framecount)):
                     track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
                     track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=duration))
                     notebegin = ticker(estack[0])
-                    print(noteVal, vel)
                 prenoteVal = noteVal
                 preVel = vel
 
@@ -140,6 +137,10 @@ for i in tqdm(range(framecount)):
 
     else:
         break
+
+duration = int(ticker(estack[0]) - notebegin)
+track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
+track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=duration))
 
 cap.release()
 cv2.destroyAllWindows()
