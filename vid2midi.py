@@ -11,23 +11,29 @@ from mido import Message, MidiFile, MidiTrack, second2tick
 
 parser = argparse.ArgumentParser(prog='vid2midi', description='Convert a section of a video file to MIDI notes based on color or brightness')
 parser.add_argument('-s', '--size', default='small', type=str, choices=['small', 'medium', 'large'], help='size of the sample area')
+parser.add_argument('-p', '--position', default='center', type=str, choices=['topleft', 'center', 'bottomright'], help='position of the sample area')
 parser.add_argument('-o', '--octaves', default=1, type=int, choices=[1, 3, 7], help='octave range of resulting notes')
 parser.add_argument('-c', '--colors', default='mono', type=str, choices=['mono', 'all'], help='color range to measure')
 parser.add_argument('filename')
+parser.add_argument('output')
 parameters = parser.parse_args()
 octaves = parameters.octaves
 window_size = parameters.size
+position = parameters.position
 color_range = parameters.colors
-
-try:
-    midifile = parameters.filename.split('.')[0] + '.mid'
-except KeyError:
-    print("Bad input filename")
-    sys.exit()
 
 if os.path.isfile(parameters.filename) is False:
     print("Input file '" + parameters.filename + "' does not exist")
     sys.exit()
+
+if parameters.output:
+    midifile = parameters.output
+else:
+    try:
+        midifile = parameters.filename.split('.')[0] + '.mid'
+    except KeyError:
+        print("Bad input filename")
+        sys.exit()
 
 cap = cv2.VideoCapture(parameters.filename)
 fps = cap.get(cv2.CAP_PROP_FPS)
@@ -35,6 +41,7 @@ width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 framecount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 window = {"small": .05, "medium": .1, "large": .25}
+offset = {"topleft": .2, "center": 1, "bottomright": 1.8}
 
 mid = MidiFile()
 mid.ticks_per_beat = 480
@@ -92,11 +99,21 @@ for i in tqdm(range(framecount)):
             p = int(width * window[window_size])
         else:
             p = int(height * window[window_size])
-        left = int(width / 2) - p
-        right = int(width / 2) + p
-        top = int(height / 2) - p
-        bottom = int(height / 2) + p
-        chunk = frame[left:right, top:bottom]
+        left = int((width / 2) * offset[position]) - p
+        right = int((width / 2) * offset[position]) + p
+        top = int((height / 2) * offset[position]) - p
+        bottom = int((height / 2) * offset[position]) + p
+        if (right > width) or (bottom > height):
+            left = int(width) - p
+            right = int(width)
+            top = int(height) - p
+            bottom = int(height)
+        if (left < 0) or (top < 0):
+            left = 0
+            right = p
+            top = 0
+            bottom = p
+        chunk = frame[top:bottom, left:right]
         blurchunk = cv2.GaussianBlur(chunk, (15, 15), 0)
 
         cv2.imshow('sample', blurchunk)
@@ -123,7 +140,7 @@ for i in tqdm(range(framecount)):
         if fstack.count(noteVal) != len(fstack):
             if prenoteVal != noteVal:
                 duration = int(ticker(estack[0]) - notebegin)
-                if (noteVal != 0) and (prenoteVal != 0):
+                if (noteVal != 0) and (prenoteVal != 0) and noteVal is not None and prenoteVal is not None:
                     track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
                     track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=duration))
                     notebegin = ticker(estack[0])
