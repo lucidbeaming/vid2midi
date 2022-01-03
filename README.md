@@ -1,5 +1,5 @@
 # vid2midi
- Generates a midi file based on color or brightness levels in a video
+ Converts video signals to musical notation.
 
 Requires [OpenCV](https://opencv.org/), [Mido](https://mido.readthedocs.io/en/latest/) and [tqdm](https://github.com/tqdm/tqdm).
 
