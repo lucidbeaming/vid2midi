@@ -5,8 +5,9 @@ import numpy as np
 import sys
 import os.path
 import argparse
+from pathlib import Path
+from collections import namedtuple, deque
 from tqdm import tqdm
-from collections import namedtuple
 from mido import Message, MidiFile, MidiTrack, second2tick
 
 parser = argparse.ArgumentParser(prog='vid2midi', description='Convert a section of a video file to MIDI notes based on color or brightness')
@@ -14,28 +15,26 @@ parser.add_argument('-s', '--size', default='small', type=str, choices=['small',
 parser.add_argument('-p', '--position', default='center', type=str, choices=['topleft', 'center', 'bottomright'], help='position of the sample area')
 parser.add_argument('-o', '--octaves', default=1, type=int, choices=[1, 3, 7], help='octave range of resulting notes')
 parser.add_argument('-c', '--colors', default='mono', type=str, choices=['mono', 'all'], help='color range to measure')
+parser.add_argument('--headless', action='store_true', help='run without preview window (for batch/headless use)')
 parser.add_argument('filename')
-parser.add_argument('output')
+parser.add_argument('output', nargs='?', default=None, help='output MIDI path (default: input stem with .mid)')
 parameters = parser.parse_args()
 octaves = parameters.octaves
 window_size = parameters.size
 position = parameters.position
 color_range = parameters.colors
 
-if os.path.isfile(parameters.filename) is False:
-    print("Input file '" + parameters.filename + "' does not exist")
-    sys.exit()
+input_path = Path(parameters.filename).resolve()
+if not input_path.is_file():
+    print("Input file '" + parameters.filename + "' does not exist", file=sys.stderr)
+    sys.exit(1)
 
 if parameters.output:
-    midifile = parameters.output
+    midifile = Path(parameters.output).resolve()
 else:
-    try:
-        midifile = parameters.filename.split('.')[0] + '.mid'
-    except KeyError:
-        print("Bad input filename")
-        sys.exit()
+    midifile = input_path.with_suffix('.mid')
 
-cap = cv2.VideoCapture(parameters.filename)
+cap = cv2.VideoCapture(str(input_path))
 fps = cap.get(cv2.CAP_PROP_FPS)
 width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
@@ -59,107 +58,128 @@ for octave in range(1, octaves + 1):
     for i in range(1, 13):
         j += 1
         if (octave == octaves) and (i == 12):
-            end_step = 255
+            end_step = 256
         else:
             end_step = j * brange_step
         _blevels.append(BLevel(brange=range(((j - 1) * brange_step), end_step), bval=j + bval_lower))
 
 def detect_level(h_val):
-    h_val = int(h_val)
+    h_val = max(0, min(255, int(h_val)))
     for blevel in _blevels:
         if h_val in blevel.brange:
             return blevel.bval
+    return _blevels[-1].bval
 
 def ticker(t_val):
     ticks = int(second2tick(t_val, mid.ticks_per_beat, mid.tempo))
     return ticks
 
 
-frametime = 1 / fps
-ticktime = ticker(frametime)
-elapsed = 0
+if not cap.isOpened():
+    print("Error opening video stream or file", file=sys.stderr)
+    sys.exit(1)
 
-if cap.isOpened() is False:
-    print("Error opening video stream or file")
+if fps <= 0 or not np.isfinite(fps):
+    print("Invalid or zero FPS in video", file=sys.stderr)
+    cap.release()
+    sys.exit(1)
 
-fstack = [0]
-estack = [0]
-prenoteVal = 0
-preVel = 0
-notebegin = 0
+if framecount <= 0:
+    print("Video has no frames", file=sys.stderr)
+    cap.release()
+    sys.exit(1)
 
-cv2.namedWindow('sample')
-cv2.moveWindow('sample', 250, 150)
+try:
+    frametime = 1 / fps
+    ticktime = ticker(frametime)
+    elapsed = 0
 
-for i in tqdm(range(framecount)):
+    fstack = deque([0], maxlen=5)
+    estack = deque([0], maxlen=5)
+    prenoteVal = 0
+    preVel = 0
+    notebegin = 0
+    had_valid_note = False
 
-    ret, frame = cap.read()
-    if ret is True:
-        if width > height:
-            p = int(width * window[window_size])
+    if not parameters.headless:
+        cv2.namedWindow('sample')
+        cv2.moveWindow('sample', 250, 150)
+
+    for i in tqdm(range(framecount)):
+        ret, frame = cap.read()
+        if ret is True:
+            if width > height:
+                p = int(width * window[window_size])
+            else:
+                p = int(height * window[window_size])
+            left = int((width / 2) * offset[position]) - p
+            right = int((width / 2) * offset[position]) + p
+            top = int((height / 2) * offset[position]) - p
+            bottom = int((height / 2) * offset[position]) + p
+            if (right > width) or (bottom > height):
+                left = int(width) - p
+                right = int(width)
+                top = int(height) - p
+                bottom = int(height)
+            if (left < 0) or (top < 0):
+                left = 0
+                right = p
+                top = 0
+                bottom = p
+            chunk = frame[top:bottom, left:right]
+            blurchunk = cv2.GaussianBlur(chunk, (15, 15), 0)
+
+            if not parameters.headless:
+                cv2.imshow('sample', blurchunk)
+
+            hsv = cv2.cvtColor(blurchunk, cv2.COLOR_BGR2HSV)
+            h, s, v = cv2.split(hsv)
+
+            if color_range == 'all':
+                avg_hue = np.average(h.flatten())
+                noteHue = int(np.interp(avg_hue, [0, 179], [0, 255]))
+                avg = np.average(v.flatten())
+                vel = int(np.interp(avg, [0, 255], [75, 127]))
+                noteVal = detect_level(noteHue)
+            else:
+                avg = int(np.average(v.flatten()))
+                vel = 110
+                noteVal = detect_level(avg)
+
+            fstack.append(noteVal)
+            estack.append(elapsed)
+            if fstack.count(noteVal) != len(fstack):
+                if prenoteVal != noteVal:
+                    duration = int(ticker(estack[0]) - notebegin)
+                    if (noteVal != 0) and (prenoteVal != 0):
+                        track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
+                        track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=max(0, duration)))
+                        notebegin = ticker(estack[0])
+                    prenoteVal = noteVal
+                    preVel = vel
+                    if noteVal != 0:
+                        had_valid_note = True
+
+            if not parameters.headless and (cv2.waitKey(25) & 0xFF == ord('q')):
+                break
+
+            elapsed += frametime
+
         else:
-            p = int(height * window[window_size])
-        left = int((width / 2) * offset[position]) - p
-        right = int((width / 2) * offset[position]) + p
-        top = int((height / 2) * offset[position]) - p
-        bottom = int((height / 2) * offset[position]) + p
-        if (right > width) or (bottom > height):
-            left = int(width) - p
-            right = int(width)
-            top = int(height) - p
-            bottom = int(height)
-        if (left < 0) or (top < 0):
-            left = 0
-            right = p
-            top = 0
-            bottom = p
-        chunk = frame[top:bottom, left:right]
-        blurchunk = cv2.GaussianBlur(chunk, (15, 15), 0)
-
-        cv2.imshow('sample', blurchunk)
-
-        hsv = cv2.cvtColor(blurchunk, cv2.COLOR_BGR2HSV)
-        h, s, v = cv2.split(hsv)
-
-        if color_range == 'all':
-            avg_hue = np.average(h.flatten())
-            noteHue = int(np.interp(avg_hue, [0, 179], [0, 255]))
-            avg = np.average(v.flatten())
-            vel = int(np.interp(avg, [0, 255], [75, 127]))
-            noteVal = detect_level(noteHue)
-        else:
-            avg = int(np.average(v.flatten()))
-            vel = 110
-            noteVal = detect_level(avg)
-
-        fstack.append(noteVal)
-        estack.append(elapsed)
-        if (len(fstack) > 5):
-            fstack.pop(0)
-            estack.pop(0)
-        if fstack.count(noteVal) != len(fstack):
-            if prenoteVal != noteVal:
-                duration = int(ticker(estack[0]) - notebegin)
-                if (noteVal != 0) and (prenoteVal != 0) and noteVal is not None and prenoteVal is not None:
-                    track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
-                    track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=duration))
-                    notebegin = ticker(estack[0])
-                prenoteVal = noteVal
-                preVel = vel
-
-        if cv2.waitKey(25) & 0xFF == ord('q'):
             break
 
-        elapsed += frametime
+    if had_valid_note and prenoteVal != 0:
+        duration = max(0, int(ticker(estack[0]) - notebegin))
+        track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
+        track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=duration))
 
-    else:
-        break
-
-duration = int(ticker(estack[0]) - notebegin)
-track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
-track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=duration))
-
-cap.release()
-cv2.destroyAllWindows()
-mid.save(midifile)
-sys.exit()
+    try:
+        mid.save(str(midifile))
+    except (OSError, PermissionError) as e:
+        print(f"Failed to save MIDI file: {e}", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(0)
+finally:
+    cap.release()
+    if not parameters.headless:
+        cv2.destroyAllWindows()
