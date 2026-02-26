@@ -4,12 +4,13 @@
 Requires [OpenCV](https://opencv.org/), [Mido](https://mido.readthedocs.io/en/latest/) and [tqdm](https://github.com/tqdm/tqdm).
 
 ### Usage
-vid2midi [-h] [-s {small,medium,large}] [-o {1,3,7}] [-c {mono,all}] filename
+vid2midi [-h] [-s {small,medium,large}] [-o {1,3,7}] [-c {mono,all}] [--headless] filename [output]
 
   -h, --help, show this help message and exit
   -s, --size {small,medium,large}, size of the sample area
   -o, --octaves {1,3,7}, octave range of resulting notes
   -c, --colors {mono,all}, color range to measure
+  --headless, run without preview window (for batch/headless or SSH use)
  
 #### Notes
  It works by grabbing a square in the center of the video file, blurring it, and averaging the hue or brightness values of the contained pixels. Iterating each frame of the movie file, it looks for a value that is consistent for at least 5 frames. If it is, a note is generated corresponding to 1, 3, or 7 octaves of the chromatic scale. Brighter areas or purple produce higher notes.
