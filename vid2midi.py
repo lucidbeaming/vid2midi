@@ -95,7 +95,6 @@ try:
     elapsed = 0
 
     fstack = deque([0], maxlen=5)
-    estack = deque([0], maxlen=5)
     prenoteVal = 0
     preVel = 0
     notebegin = 0
@@ -147,14 +146,14 @@ try:
                 noteVal = detect_level(avg)
 
             fstack.append(noteVal)
-            estack.append(elapsed)
             if fstack.count(noteVal) != len(fstack):
                 if prenoteVal != noteVal:
-                    duration = int(ticker(estack[0]) - notebegin)
+                    # The change is seen on this frame, so the boundary is this frame's start.
+                    duration = int(ticker(elapsed) - notebegin)
                     if (noteVal != 0) and (prenoteVal != 0):
                         track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
                         track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=max(0, duration)))
-                        notebegin = ticker(estack[0])
+                        notebegin = ticker(elapsed)
                     prenoteVal = noteVal
                     preVel = vel
                     if noteVal != 0:
@@ -169,7 +168,8 @@ try:
             break
 
     if had_valid_note and prenoteVal != 0:
-        duration = max(0, int(ticker(estack[0]) - notebegin))
+        # The last note lasts to the end of the frames read.
+        duration = max(0, int(ticker(elapsed) - notebegin))
         track.append(Message('note_on', note=prenoteVal, velocity=preVel, time=0))
         track.append(Message('note_off', note=prenoteVal, velocity=preVel, time=duration))
 

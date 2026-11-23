@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Fixed
+- Note boundaries landed 4 frames before the change in the picture (133 ms at 30 fps), and the last note ended 4 frames early. Boundaries now use the frame where the change is seen (#17)
+
 ### Changed
 - README rewritten: install, every option (including `-p/--position`), the note ranges, importing at 120 BPM and how it works (#18)
 - Relicensed from GPL-3.0 to MIT; earlier releases keep GPL-3.0 (#15)

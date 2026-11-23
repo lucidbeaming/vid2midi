@@ -74,7 +74,7 @@ For each frame, [`vid2midi.py`](vid2midi.py):
 3. maps that average to a note band
 4. when the band changes, writes the previous note with its length and starts the next one
 
-The MIDI file is written with [Mido](https://mido.readthedocs.io/) when the video ends. Note: note changes currently land four frames before the change in the picture ([#17](https://github.com/lucidbeaming/vid2midi/issues/17)).
+The MIDI file is written with [Mido](https://mido.readthedocs.io/) when the video ends.
 
 ## Related projects
 
