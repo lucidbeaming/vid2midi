@@ -17,3 +17,7 @@ vid2midi [-h] [-s {small,medium,large}] [-o {1,3,7}] [-c {mono,all}] [--headless
  
 #### Why is this useful?
 When soundtracking videos in a Digital Audio Workstation such as Reaper, Ableton, or Reason, it is useful to have a timing track that corresponds to the video to match the timing of scene changes. As a creative tool it is the reverse of visualizing audio. Instead of generating audio reactive animation, this allows for creating a video first, without a soundtrack. Then you can make music or sounds that match the tempo and feel of the visuals. 
+
+## License
+
+[MIT](LICENSE). Releases before this change were published under GPL-3.0, and those copies keep that license.
