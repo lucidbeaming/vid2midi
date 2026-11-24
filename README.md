@@ -2,6 +2,8 @@
 
 Generate MIDI files from brightness levels in video.
 
+Documentation: [lucidbeaming.com/art/code/vid2midi](https://lucidbeaming.com/art/code/vid2midi)
+
 **Project page:** [lucidbeaming.com/art/code](https://lucidbeaming.com/art/code)
 
 vid2midi is a command-line tool that sonifies video: it watches one area of every frame and writes a MIDI note whenever that area gets brighter, darker or changes color. Load the `.mid` file into a DAW (Reaper, Ableton Live, Logic, Reason…) and any instrument plays in time with the picture.
